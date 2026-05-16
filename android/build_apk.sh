@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # -------------------------------------------------------------------------
-# Build a debug APK for the HEXON BETA WebView wrapper without Gradle.
+# Build the HEXON BETA APK for the WebView wrapper without Gradle.
 #
 # Requires:
 #   ANDROID_SDK_ROOT pointing at a directory containing
@@ -8,8 +8,9 @@
 #     platforms/android-34/android.jar
 #   JAVA_HOME with javac >= 11 (Java 17 is fine).
 #
-# The output APK lands at android/build/HEXON-debug.apk and is signed with
-# a local debug keystore (regenerated if missing).
+# The output APK lands at android/build/HEXON-BETA.apk and is signed with
+# a local keystore (regenerated if missing). The build still uses the
+# debug signing config; rename of the artifact is purely cosmetic.
 # -------------------------------------------------------------------------
 set -euo pipefail
 
@@ -120,10 +121,10 @@ fi
     --v2-signing-enabled true \
     --v3-signing-enabled true \
     --min-sdk-version 21 \
-    --out "$OUT/HEXON-debug.apk" \
+    --out "$OUT/HEXON-BETA.apk" \
     "$OUT/aligned.apk"
 
-"$APKSIGNER" verify --print-certs "$OUT/HEXON-debug.apk" >/dev/null
+"$APKSIGNER" verify --print-certs "$OUT/HEXON-BETA.apk" >/dev/null
 echo
-echo "OK  -> $OUT/HEXON-debug.apk"
-ls -la "$OUT/HEXON-debug.apk"
+echo "OK  -> $OUT/HEXON-BETA.apk"
+ls -la "$OUT/HEXON-BETA.apk"
