@@ -3,7 +3,7 @@
           xmlns:tools="http://schemas.android.com/tools"
           package="com.hexon.beta"
           android:versionCode="1"
-          android:versionName="1.0">
+          android:versionName="BETA">
 
     <uses-sdk android:minSdkVersion="21"
               android:targetSdkVersion="34" />

@@ -430,6 +430,17 @@ function refillTrayIfEmpty(){
     state.run.pieces = genPieces();
   }
 }
+/* ---------- Scoring tunables ----------
+   The user asked for "a bit more score per move". We're a casual
+   puzzle game and the previous values were way too stingy
+   (1 pt / cell, 100 / line). Bumped to 5×/8× of the old values
+   so that the on-screen numbers feel rewarding without the
+   game becoming trivially easy. */
+const SCORE_PER_CELL_PLACED = 5;     // was: 1 — every placed cell pays 5pt
+const SCORE_PER_LINE_MULT   = 80;    // base per cleared line (was: 10*BOARD_SIZE = 100; now: 800 per line)
+const SCORE_MULTI_LINE_BONUS_BASE = 50;  // was: 10  — bonus when ≥2 lines clear
+const SCORE_MULTI_LINE_BONUS_STEP = 40;  // was:  8  — extra per additional line
+
 function placePiece(idx, br, bc){
   const piece = state.run.pieces[idx];
   if(!piece) return;
@@ -437,7 +448,7 @@ function placePiece(idx, br, bc){
   // place
   place(state.run.board, piece.shape, br, bc, piece.color);
   const placedCells = shapeSize(piece.shape);
-  state.run.score += placedCells; // base points per cell
+  state.run.score += placedCells * SCORE_PER_CELL_PLACED; // base points per cell
   state.run.placedThisRun += 1;
   state.stats.placedTotal = (state.stats.placedTotal||0) + 1;
   state.run.pieces[idx] = null;
@@ -499,8 +510,10 @@ function placePiece(idx, br, bc){
       // chained on consecutive clears (next placement also clears)
     }
     // multi-line in one move
-    const multiBonus = linesCleared >= 2 ? (10 + (linesCleared-1)*8) : 0;
-    const baseLineScore = linesCleared * 10 * BOARD_SIZE; // 100 per line
+    const multiBonus = linesCleared >= 2
+      ? (SCORE_MULTI_LINE_BONUS_BASE + (linesCleared - 1) * SCORE_MULTI_LINE_BONUS_STEP)
+      : 0;
+    const baseLineScore = linesCleared * SCORE_PER_LINE_MULT * BOARD_SIZE; // 800 per line
     const combo = state.run.combo;
     state.run.score += Math.floor((baseLineScore + multiBonus) * combo);
 

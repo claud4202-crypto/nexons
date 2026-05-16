@@ -69,7 +69,7 @@ RES_FILES=$(find res -type f \( -name '*.xml' -o -name '*.png' -o -name '*.jpg' 
     --min-sdk-version 21 \
     --target-sdk-version 34 \
     --version-code 1 \
-    --version-name "1.0" \
+    --version-name "BETA" \
     -A assets \
     --auto-add-overlay \
     $(find "$OUT/compiled-res" -name '*.flat' -printf '%p ')

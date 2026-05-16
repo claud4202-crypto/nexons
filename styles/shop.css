@@ -152,6 +152,21 @@
 }
 .skin-name { font-weight: 800; font-size: 14px; letter-spacing: .01em; }
 
+/* The per-skin glyph rendered above the swatch. Each card pulls
+   its own SVG via skinIconSvg() in skins.js, so every skin gets a
+   visually distinct icon (lightning for neon, flame for ember, …). */
+.skin-icon {
+  --icon-size: 52px;
+  width: var(--icon-size); height: var(--icon-size);
+  display: grid; place-items: center;
+  border-radius: 14px;
+  background: radial-gradient(120% 120% at 30% 25%, rgba(255,255,255,.18), rgba(0,0,0,.30) 55%, rgba(0,0,0,.40));
+  border: 1px solid color-mix(in srgb, var(--card-accent) 35%, rgba(255,255,255,.15));
+  box-shadow: 0 8px 20px -10px color-mix(in srgb, var(--card-accent) 55%, transparent);
+  margin: 0 auto 2px;
+}
+.skin-icon svg { width: 70%; height: 70%; display: block; }
+
 /* ---------- Coin bundle cards ---------- */
 .coin-card {
   --card-accent: #ffb454;

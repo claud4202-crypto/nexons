@@ -3,7 +3,30 @@
    ============================================================ */
 "use strict";
 
-document.addEventListener("DOMContentLoaded", init);
+document.addEventListener("DOMContentLoaded", () => {
+  try { init(); }
+  finally { dismissBootSplash(); }
+});
+
+/* Dismiss the inline #boot-splash that is painted from index.html
+   before any JS runs. We keep the node in the DOM during the CSS
+   transition so the fade-out is smooth, then remove it once the
+   transition finishes. A safety timer also forces a removal in
+   case the transition event never fires (e.g. tab was hidden). */
+function dismissBootSplash(){
+  const el = document.getElementById("boot-splash");
+  if(!el) return;
+  /* Show the splash for at least 600ms so it doesn't flash on
+     fast desktop reloads — the brand moment should feel like an
+     intentional welcome, not a flicker. */
+  const minShownMs = 600;
+  setTimeout(() => {
+    el.classList.add("dismissed");
+    const cleanup = () => { if(el.parentNode) el.parentNode.removeChild(el); };
+    el.addEventListener("transitionend", cleanup, { once: true });
+    setTimeout(cleanup, 1500);
+  }, minShownMs);
+}
 
 /* Modal show/hide helpers. We use both .show (legacy) and .active
    (animation hook in effects.css) so old CSS keeps working while

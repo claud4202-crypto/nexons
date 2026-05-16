@@ -195,7 +195,6 @@ async function handleLoginConfirm(){
   if(!name){ showLoginError(t("login.err.no-name") || "Введіть нік"); return; }
   if(pwd.length < 4){ showLoginError(t("login.err.weak-pass") || "Пароль мін. 4 символи"); return; }
 
-  const safeName = (typeof safeProfileName === "function") ? safeProfileName(name) : name.toLowerCase();
   const pwHash   = await sha256Hex(pwd);
 
   /* Admin gate. The literal nickname "admin" is reserved — nobody
@@ -214,13 +213,25 @@ async function handleLoginConfirm(){
 
   /* Try loading a saved profile for this nickname first. On Android the
      disk bridge is consulted; in the browser this falls back to the
-     per-nickname localStorage cache built by saveProfileToDisk. */
+     per-nickname localStorage cache built by saveProfileToDisk.
+     The lookup is case-insensitive because safeProfileName() lowercases
+     the lookup key — so "Alex" and "alex" resolve to the same profile. */
   let loaded = (typeof loadProfileFromDisk === "function")
     ? loadProfileFromDisk(name) : null;
+  /* Reject the login if a profile exists and the password hash
+     doesn't match. We require the saved profile to actually carry
+     a password hash — legacy saves without one fall through to the
+     "first time" branch so the player can set a fresh password. */
   if (loaded && loaded.passwordHash && loaded.passwordHash !== pwHash){
     showLoginError(t("login.err.bad-pass") || "Невірний пароль");
+    /* Briefly highlight the password field to make the failure
+       feel obvious — the toast-style errors are easy to miss on
+       small screens. */
+    pwdInput.focus();
+    pwdInput.select && pwdInput.select();
     return;
   }
+  let isReturning = false;
   if (loaded && loaded.state){
     /* Restore everything from disk and continue. The disk blob's state
        carries its own profile.id so we don't generate a new one. */
@@ -228,6 +239,7 @@ async function handleLoginConfirm(){
     state.profile.nickname = name.slice(0, 20);
     state.profile.passwordHash = pwHash;
     if (!state.profile.id) state.profile.id = genId();
+    isReturning = true;
   } else {
     /* Fresh registration on this device. We deliberately mint a NEW
        HEXON ID rather than reusing whatever was left over in state,
@@ -250,7 +262,15 @@ async function handleLoginConfirm(){
   registerLoginDay();
   saveState();
   enterApp();
-  toast(t("toast.welcome", { name: state.profile.nickname }), "success");
+  if (isReturning){
+    toast(
+      t("toast.welcome-back", { name: state.profile.nickname }) ||
+      ("З поверненням, " + state.profile.nickname + "!"),
+      "success"
+    );
+  } else {
+    toast(t("toast.welcome", { name: state.profile.nickname }), "success");
+  }
 }
 
 /* Copy fields from a saved snapshot into the live state. We don't just
@@ -324,8 +344,43 @@ function enterApp() {
   if (typeof state.stats.totalScoreFromGames !== "number") {
     state.stats.totalScoreFromGames = (state.stats.best || 0); // best-effort
   }
+  /* Kick off online leaderboard polling. The first GET runs
+     immediately so the table is warm by the time the player
+     opens the rankings screen, and subsequent GETs happen every
+     60 seconds while the tab is visible (see leaderboard.js). */
+  if (typeof startLeaderboardPolling === "function") startLeaderboardPolling();
+  /* Submit our cached best score to the shared bin in case the
+     last run never made it (e.g. the player closed the app while
+     offline). Fire-and-forget. */
+  if (typeof submitLeaderboardScore === "function") submitLeaderboardScore();
   // Start at the menu screen by default.
   go("menu");
+}
+
+/* Commit an abandoned run into the cross-run stats and discard
+   state.run. Called when the player navigates away from the
+   game screen without finishing the run. Records (best score,
+   total games, achievements, etc.) are preserved — only the
+   in-progress board/tray is dropped so the next visit to the
+   game screen rolls a fresh layout with the currently equipped
+   skin's palette. */
+function commitAbandonedRunIfAny(){
+  const r = state.run;
+  if (!r) return;
+  /* Only count it as a played game if the user actually placed
+     anything — otherwise a "Play → Menu" tap shouldn't bump the
+     games counter. */
+  if (r.placedThisRun > 0){
+    state.stats.games          = (state.stats.games || 0) + 1;
+    state.stats.totalTimeMs    = (state.stats.totalTimeMs || 0) + (Date.now() - r.startedAt);
+    state.stats.totalScoreFromGames = (state.stats.totalScoreFromGames || 0) + r.score;
+    if (r.score > (state.stats.best || 0)) state.stats.best = r.score;
+    if (typeof bumpDailyTask === "function") bumpDailyTask("games", 1);
+    if (typeof evaluateAchievements === "function") evaluateAchievements();
+    if (typeof updateLeaderboardsForMe === "function") updateLeaderboardsForMe();
+  }
+  state.run = null;
+  saveState();
 }
 
 /* ---------- Screen navigation ----------
@@ -341,6 +396,24 @@ function go(screen) {
   }
   const target = document.querySelector('[data-screen="' + screen + '"]');
   if (!target) return;
+
+  /* Leaving the game screen always discards the active run so
+     the next time the player taps "Play" they get a fresh
+     board that uses whatever skin/palette they've just picked
+     in the Shop. The best score and stats are preserved by
+     commitAbandonedRunIfAny() above. The game-over modal
+     already nukes state.run via endGame()+startGame(), so this
+     only fires when the player navigates away mid-run. */
+  if (currentScreen === "game" && screen !== "game" && state.run){
+    commitAbandonedRunIfAny();
+  }
+  /* Entering the game screen with no active run starts a fresh
+     one. This is what makes the freshly-equipped skin colors
+     show up without forcing a full page reload. */
+  if (screen === "game" && !state.run && typeof startGame === "function"){
+    startGame();
+  }
+
   $$(".screen").forEach(s => s.classList.toggle("active", s.dataset.screen === screen));
   currentScreen = screen;
   // refresh data when entering a section

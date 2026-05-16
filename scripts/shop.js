@@ -162,6 +162,14 @@ function paintSkinGrid(){
     card.className = "shop-card skin-card" + (isEquipped ? " is-equipped" : owned ? " is-owned" : "");
     card.style.setProperty("--card-accent", skin.accent);
 
+    /* Unique per-skin icon. The glyph itself is built in skins.js
+       and inherits colours from the palette so no two skins look
+       alike. We host it on a tinted glass disc so the icon reads
+       clearly on top of bright palettes too. */
+    const iconWrap = document.createElement("div");
+    iconWrap.className = "skin-icon";
+    iconWrap.innerHTML = (typeof skinIconSvg === "function") ? skinIconSvg(id) : "";
+
     /* Preview swatch — a 3x2 grid of cells coloured from this skin. */
     const swatch = document.createElement("div");
     swatch.className = "skin-swatch";
