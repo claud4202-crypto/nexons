@@ -112,7 +112,17 @@ function wireActivationRedeemCard(){
     state.activations.redeemed      = (state.activations.redeemed | 0) + 1;
     state.activations.totalReceived = (state.activations.totalReceived | 0) + r.amount;
     saveState();
-    toast((t("redeem.ok") || "+{n} HEX зараховано").replace("{n}", r.amount), "success");
+    /* If the code still has redemptions left (multi-use codes), tell
+       the player how many remain so they can use it again later.
+       Otherwise stick with the classic single-success toast. */
+    const baseMsg = (t("redeem.ok") || "+{n} HEX зараховано").replace("{n}", r.amount);
+    if (r.remaining && r.remaining > 0){
+      const tailKey = (r.remaining === 1) ? "redeem.remaining.one" : "redeem.remaining.many";
+      const tail = (t(tailKey, { n: r.remaining }) || ("(" + r.remaining + " left)"));
+      toast(baseMsg + " · " + tail, "success");
+    } else {
+      toast(baseMsg, "success");
+    }
     inp.value = "";
     try { sfx.coinUp && sfx.coinUp(); } catch {}
     paintRedeemPane();

@@ -434,6 +434,37 @@
   color: #2a1100;
   border-color: rgba(255,180,84,.0);
 }
+/* Max-uses chips: cooler tint so they don't blur into the amount row. */
+.admin-quick-uses {
+  background: rgba(124, 92, 255, .12);
+  border-color: rgba(124, 92, 255, .35);
+  color: #cdbfff;
+  min-width: 38px;
+  text-align: center;
+}
+.admin-quick-uses:hover { background: rgba(124, 92, 255, .22); }
+.admin-quick-uses.on {
+  background: linear-gradient(180deg, #7c5cff, #24bdff);
+  color: #06091a;
+  border-color: transparent;
+}
+.admin-gen-uses-hint {
+  flex: 0 0 auto;
+  align-self: center;
+  font-size: 11px;
+  color: var(--fg-mute);
+  letter-spacing: .04em;
+}
+.admin-history-uses {
+  font-size: 11px;
+  font-weight: 700;
+  color: #cdbfff;
+  background: rgba(124, 92, 255, .14);
+  border: 1px solid rgba(124, 92, 255, .30);
+  border-radius: 999px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
 
 .admin-reset {
   color: #ffb6a8 !important;

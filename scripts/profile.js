@@ -173,18 +173,26 @@ const ADMIN_PASSWORD = "hexon-admin-2025";
 const ADMIN_PASSWORD_HASH = "05209a907afbebe33e669ffc7e6122a59e711f1d139ae195ab3ac881664974a8";
 
 /* ---------- Activation codes ----------
-   Format on the wire (URL-safe, copy-pasteable):
+   Two wire formats are supported:
 
-     HX1-<TARGETID12>-<AMOUNT>-<NONCE>-<SIG10>
+     HX2-<TARGETID12>-<AMOUNT>-<MAXUSES>-<NONCE>-<SIG10>   (new)
+     HX1-<TARGETID12>-<AMOUNT>-<NONCE>-<SIG10>             (legacy)
 
-   where TARGETID12 is the player ID stripped of dashes, AMOUNT
-   is the HEX delta as a base-10 integer, NONCE is a 6-char
-   random base-32 string, and SIG10 is the first 10 hex chars
-   of HMAC-SHA256(ACTIVATION_SECRET, "HX1|TARGET|AMOUNT|NONCE").
-   The shared secret is a constant; this is *not* meant to
-   defend against a determined attacker who decompiles the APK,
-   only to keep casual cheaters from forging codes. */
+   HX2 lets the admin cap how many times a single code can be
+   redeemed (1..9999). HX1 stays around so codes minted before
+   this feature shipped keep working as a single-use code.
+
+   In both formats TARGETID12 is the player ID with dashes stripped,
+   AMOUNT is the HEX delta as a base-10 integer, NONCE is a 6-char
+   random base-32 string, and SIG10 is the first 10 hex chars of
+   HMAC-SHA256(ACTIVATION_SECRET, "<VER>|TARGET|AMOUNT|[USES|]NONCE").
+   The shared secret is a constant; this is *not* meant to defend
+   against a determined attacker who decompiles the APK, only to
+   keep casual cheaters from forging codes. */
 const ACTIVATION_SECRET = "hex0n_beta_v1_activation_secret_2025";
+/* Sentinel for "unlimited" max-uses in the UI. Encoded as 9999 on
+   the wire so the signature payload stays a finite base-10 integer. */
+const ACTIVATION_UNLIMITED = 9999;
 
 function _b32nonce(len){
   const A = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -195,31 +203,73 @@ function _b32nonce(len){
   return s;
 }
 function _strip(s){ return String(s||"").replace(/-/g,"").toUpperCase(); }
-
-async function makeActivationCode(targetId, amount){
-  const tid   = _strip(targetId);
-  const amt   = Math.max(0, Math.floor(Number(amount)||0));
-  const nonce = _b32nonce(6);
-  const msg   = "HX1|" + tid + "|" + amt + "|" + nonce;
-  const sig   = (await hmacSha256Hex(ACTIVATION_SECRET, msg)).slice(0, 10).toUpperCase();
-  return "HX1-" + tid + "-" + amt + "-" + nonce + "-" + sig;
+function _clampMaxUses(n){
+  const v = Math.floor(Number(n) || 1);
+  if(!isFinite(v) || v < 1) return 1;
+  if(v > ACTIVATION_UNLIMITED) return ACTIVATION_UNLIMITED;
+  return v;
 }
 
-/* { ok:true, amount:N } on success, { ok:false, reason:".." } on failure. */
+async function makeActivationCode(targetId, amount, maxUses){
+  const tid   = _strip(targetId);
+  const amt   = Math.max(0, Math.floor(Number(amount)||0));
+  const uses  = _clampMaxUses(maxUses);
+  const nonce = _b32nonce(6);
+  /* Backwards-compat: maxUses=1 keeps emitting an HX1 single-use
+     code so existing clients (without this update) still accept it.
+     Any other cap forces the new HX2 envelope. */
+  if(uses === 1){
+    const msg = "HX1|" + tid + "|" + amt + "|" + nonce;
+    const sig = (await hmacSha256Hex(ACTIVATION_SECRET, msg)).slice(0, 10).toUpperCase();
+    return "HX1-" + tid + "-" + amt + "-" + nonce + "-" + sig;
+  }
+  const msg = "HX2|" + tid + "|" + amt + "|" + uses + "|" + nonce;
+  const sig = (await hmacSha256Hex(ACTIVATION_SECRET, msg)).slice(0, 10).toUpperCase();
+  return "HX2-" + tid + "-" + amt + "-" + uses + "-" + nonce + "-" + sig;
+}
+
+/* { ok:true, amount, maxUses, used, remaining } on success,
+   { ok:false, reason:".." } on failure. */
 async function verifyActivationCode(code, myId){
   const parts = String(code||"").trim().toUpperCase().split("-");
-  if(parts.length !== 5 || parts[0] !== "HX1") return { ok:false, reason:"format" };
-  const [, tid, amtStr, nonce, sig] = parts;
+  let ver, tid, amtStr, usesStr, nonce, sig;
+  if(parts.length === 6 && parts[0] === "HX2"){
+    [ver, tid, amtStr, usesStr, nonce, sig] = parts;
+  } else if(parts.length === 5 && parts[0] === "HX1"){
+    [ver, tid, amtStr, nonce, sig] = parts;
+    usesStr = "1";
+  } else {
+    return { ok:false, reason:"format" };
+  }
   if(_strip(myId) !== tid) return { ok:false, reason:"wrong-id" };
   const amt = parseInt(amtStr, 10);
   if(!isFinite(amt) || amt <= 0 || amt > 10000000) return { ok:false, reason:"amount" };
-  const msg = "HX1|" + tid + "|" + amt + "|" + nonce;
+  const maxUses = parseInt(usesStr, 10);
+  if(!isFinite(maxUses) || maxUses < 1 || maxUses > ACTIVATION_UNLIMITED) return { ok:false, reason:"amount" };
+  const msg = (ver === "HX2")
+    ? ("HX2|" + tid + "|" + amt + "|" + maxUses + "|" + nonce)
+    : ("HX1|" + tid + "|" + amt + "|" + nonce);
   const calc = (await hmacSha256Hex(ACTIVATION_SECRET, msg)).slice(0, 10).toUpperCase();
   if(calc !== sig) return { ok:false, reason:"bad-sig" };
-  /* Single-use: refuse a nonce that's already been redeemed on this
-     device. The list lives on state and persists with the profile. */
+  /* Per-nonce usage counter. A code is rejected once it hits maxUses.
+     The legacy `usedActivationCodes` array stays in sync (full nonces
+     are pushed onto it on the final redeem) so older code paths that
+     read it for "have I seen this nonce?" still see consumed codes. */
   if(!state.usedActivationCodes) state.usedActivationCodes = [];
-  if(state.usedActivationCodes.indexOf(nonce) >= 0) return { ok:false, reason:"used" };
-  state.usedActivationCodes.push(nonce);
-  return { ok:true, amount: amt, nonce };
+  if(!state.activationUsage || typeof state.activationUsage !== "object"){
+    state.activationUsage = {};
+    /* Migrate older single-use array: any nonce already on it counts
+       as a fully-consumed HX1 redemption. */
+    for(const n of state.usedActivationCodes){
+      state.activationUsage[n] = 1;
+    }
+  }
+  const used = state.activationUsage[nonce] | 0;
+  if(used >= maxUses) return { ok:false, reason:"used" };
+  state.activationUsage[nonce] = used + 1;
+  const remaining = maxUses - (used + 1);
+  if(remaining === 0 && state.usedActivationCodes.indexOf(nonce) < 0){
+    state.usedActivationCodes.push(nonce);
+  }
+  return { ok:true, amount: amt, maxUses, used: used + 1, remaining, nonce };
 }

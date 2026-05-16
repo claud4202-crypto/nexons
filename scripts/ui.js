@@ -465,6 +465,15 @@ function renderMenu() {
    right above the amount input so the admin doesn't have to retype the
    most common values. */
 const ADMIN_QUICK_AMOUNTS = [1000, 10000, 100000, 1000000];
+/* Quick-pick max-uses chips. The "∞" chip maps to ACTIVATION_UNLIMITED
+   on the wire so the encoded payload stays a finite integer. */
+const ADMIN_QUICK_USES = [
+  { v: 1,    label: "1" },
+  { v: 5,    label: "5" },
+  { v: 10,   label: "10" },
+  { v: 50,   label: "50" },
+  { v: 9999, label: "∞" },
+];
 
 function renderAdminScreen(){
   /* Refresh the top stat row from state. */
@@ -486,6 +495,9 @@ function renderAdminScreen(){
 
   const quickPicks = ADMIN_QUICK_AMOUNTS.map(n =>
     '<button class="admin-quick" data-amt="' + n + '" type="button">' + fmt(n) + '</button>'
+  ).join("");
+  const quickUses = ADMIN_QUICK_USES.map(u =>
+    '<button class="admin-quick admin-quick-uses" data-uses="' + u.v + '" type="button">' + u.label + '</button>'
   ).join("");
 
   panel.innerHTML =
@@ -516,6 +528,14 @@ function renderAdminScreen(){
             '<input type="number" id="admin-gen-amt" placeholder="HEX" min="1" max="10000000" value="10000">'+
           '</div>'+
           '<div class="admin-quick-row">' + quickPicks + '</div>'+
+        '</div>'+
+        '<div class="admin-gen-field">'+
+          '<label data-i18n="admin.gen.uses">Max uses</label>'+
+          '<div class="admin-gen-row">'+
+            '<input type="number" id="admin-gen-uses" placeholder="1" min="1" max="9999" value="1">'+
+            '<span class="admin-gen-uses-hint" data-i18n="admin.gen.uses.hint">1 = single-use</span>'+
+          '</div>'+
+          '<div class="admin-quick-row">' + quickUses + '</div>'+
         '</div>'+
         '<div class="admin-gen-row">'+
           '<button class="btn btn-primary" id="admin-gen-btn"  data-i18n="admin.gen.btn">Generate</button>'+
@@ -563,6 +583,7 @@ function renderAdminScreen(){
 
   const genIdInput = document.getElementById("admin-gen-id");
   const genAmtInput = document.getElementById("admin-gen-amt");
+  const genUsesInput = document.getElementById("admin-gen-uses");
   const genBtn  = document.getElementById("admin-gen-btn");
   const genOut  = document.getElementById("admin-gen-out");
   const genCopy = document.getElementById("admin-gen-copy");
@@ -573,18 +594,29 @@ function renderAdminScreen(){
     genIdInput.focus();
   });
 
-  /* Quick-pick amount chips. */
-  panel.querySelectorAll(".admin-quick").forEach(b => {
-    b.addEventListener("click", () => {
-      const v = parseInt(b.dataset.amt || "0", 10) || 0;
-      if (v > 0){ genAmtInput.value = String(v); }
-      panel.querySelectorAll(".admin-quick").forEach(x => x.classList.toggle("on", x === b));
+  /* Quick-pick chips. The amount and max-uses pickers share the
+     `.admin-quick` class but live in separate `.admin-quick-row`
+     blocks so highlighting only fires within the same row. */
+  panel.querySelectorAll(".admin-quick-row").forEach(row => {
+    row.querySelectorAll(".admin-quick").forEach(b => {
+      b.addEventListener("click", () => {
+        const isUses = b.classList.contains("admin-quick-uses");
+        if (isUses){
+          const u = parseInt(b.dataset.uses || "1", 10) || 1;
+          if (u >= 1) genUsesInput.value = String(u);
+        } else {
+          const v = parseInt(b.dataset.amt || "0", 10) || 0;
+          if (v > 0) genAmtInput.value = String(v);
+        }
+        row.querySelectorAll(".admin-quick").forEach(x => x.classList.toggle("on", x === b));
+      });
     });
   });
 
   genBtn.addEventListener("click", async () => {
-    const id  = (genIdInput.value || "").trim();
-    const amt = parseInt(genAmtInput.value, 10) || 0;
+    const id   = (genIdInput.value || "").trim();
+    const amt  = parseInt(genAmtInput.value, 10) || 0;
+    const uses = Math.max(1, Math.min(9999, parseInt(genUsesInput.value, 10) || 1));
     if (!id || amt <= 0){
       genOut.textContent = "—";
       genCopy.disabled = true;
@@ -592,7 +624,7 @@ function renderAdminScreen(){
       return;
     }
     try {
-      const code = await makeActivationCode(id, amt);
+      const code = await makeActivationCode(id, amt, uses);
       genOut.textContent = code;
       genCopy.disabled = false;
       genCopy.dataset.code = code;
@@ -604,7 +636,7 @@ function renderAdminScreen(){
       state.activations.generated = (state.activations.generated | 0) + 1;
       if (!Array.isArray(state.activations.history)) state.activations.history = [];
       /* Newest first, capped at 10 so the panel doesn't grow forever. */
-      state.activations.history.unshift({ code, id, amount: amt, at: Date.now() });
+      state.activations.history.unshift({ code, id, amount: amt, maxUses: uses, at: Date.now() });
       state.activations.history = state.activations.history.slice(0, 10);
       saveState();
       const genEl = document.getElementById("admin-stat-generated");
@@ -650,16 +682,23 @@ function renderAdminHistory(){
       (t("admin.history.empty") || "No codes generated yet") + '</div>';
     return;
   }
-  list.innerHTML = items.map((it, idx) => (
-    '<div class="admin-history-row" data-idx="' + idx + '">' +
-      '<div class="admin-history-meta">' +
-        '<b class="mono">' + (it.id || "?") + '</b>' +
-        '<span class="admin-history-amt">+' + fmt(it.amount || 0) + ' HEX</span>' +
-      '</div>' +
-      '<code class="admin-history-code mono">' + (it.code || "") + '</code>' +
-      '<button class="admin-history-copy" type="button" title="Copy">⧉</button>' +
-    '</div>'
-  )).join("");
+  list.innerHTML = items.map((it, idx) => {
+    const maxUses = it.maxUses | 0;
+    const usesBadge = (maxUses > 1)
+      ? ('<span class="admin-history-uses">×' + (maxUses >= 9999 ? "∞" : maxUses) + '</span>')
+      : "";
+    return (
+      '<div class="admin-history-row" data-idx="' + idx + '">' +
+        '<div class="admin-history-meta">' +
+          '<b class="mono">' + (it.id || "?") + '</b>' +
+          '<span class="admin-history-amt">+' + fmt(it.amount || 0) + ' HEX</span>' +
+          usesBadge +
+        '</div>' +
+        '<code class="admin-history-code mono">' + (it.code || "") + '</code>' +
+        '<button class="admin-history-copy" type="button" title="Copy">⧉</button>' +
+      '</div>'
+    );
+  }).join("");
   list.querySelectorAll(".admin-history-row").forEach(row => {
     const idx = parseInt(row.dataset.idx || "-1", 10);
     const it  = items[idx];

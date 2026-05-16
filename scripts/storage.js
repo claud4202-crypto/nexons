@@ -23,6 +23,7 @@ function buildStateSnapshot(){
     wallet: state.wallet,
     skins:  state.skins,
     usedActivationCodes: state.usedActivationCodes || [],
+    activationUsage: state.activationUsage || {},
     activations: state.activations || { redeemed: 0, totalReceived: 0, generated: 0 },
     run: null, // not persisted across reloads (live game state)
   };

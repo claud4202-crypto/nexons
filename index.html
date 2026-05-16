@@ -28,7 +28,9 @@
   #boot-splash{
     position:fixed; inset:0; z-index:9999;
     display:flex; flex-direction:column; align-items:center; justify-content:center;
-    gap:22px;
+    gap: clamp(14px, 3vw, 22px);
+    padding: 16px;
+    box-sizing: border-box;
     background:
       radial-gradient(60% 60% at 50% 38%, rgba(124, 92, 255, .28), transparent 70%),
       radial-gradient(80% 80% at 50% 110%, rgba(36, 189, 255, .22), transparent 70%),
@@ -56,9 +58,12 @@
   }
   #boot-splash::after{ animation-duration:30s; animation-direction:reverse; opacity:.6; }
 
-  /* Glassy hex frame with a pulsing 3-tile composition inside. */
+  /* Glassy hex frame with a pulsing 3-tile composition inside.
+     Sizing uses clamp() so the emblem stays in proportion on tiny
+     phones (≈320px wide) and big desktop monitors alike. */
   .boot-mark{
-    width: 132px; height: 132px;
+    width: clamp(96px, 28vw, 132px);
+    height: clamp(96px, 28vw, 132px);
     display:grid; place-items:center;
     filter: drop-shadow(0 24px 40px rgba(124,92,255,.35)) drop-shadow(0 6px 20px rgba(36,189,255,.20));
     animation: bootPulse 2.6s ease-in-out infinite;
@@ -68,9 +73,10 @@
   /* Wordmark below the emblem. The "BETA" pill picks up the same
      accent gradient that paints the in-game CTA buttons. */
   .boot-word{
-    display:flex; align-items:center; gap:10px;
-    font-weight:800; font-size:30px; letter-spacing:.16em;
+    display:flex; align-items:center; gap: clamp(6px, 2vw, 10px);
+    font-weight:800; font-size: clamp(20px, 6vw, 30px); letter-spacing:.16em;
     text-transform:uppercase;
+    text-align:center;
   }
   .boot-word b{
     background: linear-gradient(135deg,#fff 0%, #cfd6ff 60%, #88a4ff 100%);
@@ -78,13 +84,13 @@
   }
   .boot-word .pill{
     display:inline-block; padding:3px 10px; border-radius:999px;
-    font-size:13px; letter-spacing:.22em; font-weight:800;
+    font-size: clamp(10px, 2.8vw, 13px); letter-spacing:.22em; font-weight:800;
     background: linear-gradient(135deg, #7c5cff, #24bdff);
     color:#0b0f1a;
     box-shadow: 0 4px 14px -2px rgba(124,92,255,.55);
   }
   .boot-tag{
-    color:#8c97b6; font-size:13px; letter-spacing:.32em;
+    color:#8c97b6; font-size: clamp(11px, 2.8vw, 13px); letter-spacing:.28em;
     text-transform:uppercase;
   }
 
@@ -797,7 +803,7 @@
             </div>
             <p class="redeem-desc" data-i18n="redeem.desc">Paste a code from the admin to credit HEX to your account.</p>
             <div class="redeem-row">
-              <input type="text" id="redeem-code-input" placeholder="HX1-XXXXXXXXXXXX-AMOUNT-NONCE-SIG" autocomplete="off" spellcheck="false">
+              <input type="text" id="redeem-code-input" placeholder="HX2-XXXXXXXXXXXX-AMOUNT-USES-NONCE-SIG" autocomplete="off" spellcheck="false">
               <button class="btn btn-primary" id="redeem-code-btn" data-i18n="redeem.apply">Activate</button>
             </div>
           </div>

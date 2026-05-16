@@ -3,15 +3,21 @@ const state = {
   /* `passwordHash` is the sha-256 hex of the plaintext password the
      player chose at registration. We never store the plaintext. */
   profile: { nickname:"", id:"", passwordHash:"", registeredAt:0, lastLoginDay:0, loginDays:[] },
-  /* Activation-code nonces already redeemed on this device, so the
-     same admin-generated code can't be used twice. */
+  /* Activation-code nonces that have been fully consumed (used up to
+     their cap) on this device. Kept around for back-compat with older
+     code paths that just want to know "have I seen this nonce?". */
   usedActivationCodes: [],
+  /* Per-nonce usage counter for the activation-code system. A code is
+     accepted while `activationUsage[nonce] < maxUses` and rejected on
+     the redemption that would push it past the cap. Older saves that
+     only have `usedActivationCodes` are migrated lazily on first use. */
+  activationUsage: {},
   /* Aggregate counters for the activation-code system. `redeemed` and
      `totalReceived` track codes this player has cashed in on this
      device; `generated` tracks codes this admin has produced.
      `history` is the admin's last 10 generated codes (newest first),
-     each `{ code, id, amount, at }`. All four fields are read by the
-     Activate-code shop tab and the Admin screen. */
+     each `{ code, id, amount, maxUses, at }`. All four fields are read
+     by the Activate-code shop tab and the Admin screen. */
   activations: { redeemed: 0, totalReceived: 0, generated: 0, history: [] },
   stats: { games:0, best:0, bestRun:0, totalScore:0, totalTimeMs:0, lines:0, bestCombo:0, placedTotal:0, xp:0 },
   settings: {
